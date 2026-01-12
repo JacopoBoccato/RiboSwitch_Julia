@@ -1,0 +1,28 @@
+name = "RiboSwitch_Julia"
+uuid = "8e0e3d00-1e00-4ca8-a362-429a00ac6c4b"
+authors = ["JacopoBoccato <jacopo.boccato@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+AdvRBMs = "5c8d321f-d88f-4112-b4bc-67901fc2de0a"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+RestrictedBoltzmannMachines = "12e6b396-7db5-4506-8cb6-664a4fe1e50e"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[compat]
+AdvRBMs = "2.1.0"
+CSV = "0.10.15"
+DataFrames = "1.8.1"
+LinearAlgebra = "1.11.0"
+Optim = "2.0.0"
+Printf = "1.11.0"
+Random = "1.11.0"
+RestrictedBoltzmannMachines = "5.1.1"
+Statistics = "1.11.1"
+StatsBase = "0.34.9"
