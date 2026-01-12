@@ -95,7 +95,8 @@ function train_linear_classifier(
     batch_size = 256,
     epochs = 10,
     fit_bias = true,
-    shuffle = true
+    shuffle = true,
+    verbose = true
 )
     n_features, n_samples = size(X)
 
@@ -120,7 +121,7 @@ function train_linear_classifier(
             yb = @view y_float[batch]  # (batch)
 
             # Linear predictor
-            z = Xb' * w                # (batch)
+            z = Xb' * w
             fit_bias && (z .+= b)
 
             p = sigmoid.(z)
@@ -134,14 +135,28 @@ function train_linear_classifier(
                 b -= lr * mean(err)
             end
         end
+        # ---- Verbose logging (once per epoch) ----
+        if verbose
+            z_all = X' * w
+            fit_bias && (z_all .+= b)
+            p_all = sigmoid.(z_all)
+
+            loss =
+                -mean(y_float .* log.(p_all .+ eps()) .+
+                      (1 .- y_float) .* log.(1 .- p_all .+ eps())) +
+                regularization * sum(w.^2) / 2
+
+            @info "Epoch $epoch/$epochs | loss = $(round(loss, digits=6))"
+        end
     end
 
+    # Pack bias into weights (consistent with your LogisticModel)
     final_weights = fit_bias ? vcat(w, b) : w
 
     return LogisticModel(
         final_weights,
-        true,        # convergence (SGD finished epochs)
-        NaN,         # final_loss (or compute once if you want)
+        true,       # convergence
+        NaN,        # final_loss (optional to store)
         epochs,
         fit_bias
     )
@@ -248,4 +263,53 @@ function train_linear_regressor(
         epochs,
         fit_bias
     )
+end
+
+"""
+    prevalence_threshold(model, X, y)
+
+Compute a decision threshold such that the number of predicted positives
+matches the number of positive labels in `y`.
+
+# Arguments
+- `model`: any trained model supporting `predict(model, X)`
+- `X::AbstractMatrix`: feature matrix (features × samples)
+- `y::AbstractVector{<:Integer}`: binary labels (0/1)
+
+# Returns
+- `threshold::Float64`
+- `sorted_idx::Vector{Int}` (indices sorted by descending score)
+"""
+function prevalence_threshold(
+    model,
+    X::AbstractMatrix,
+    y::AbstractVector{<:Integer}
+)
+    n_features, n_samples = size(X)
+    length(y) == n_samples ||
+        error("Dimension mismatch: X has $n_samples samples but y has $(length(y)) labels")
+
+    all(label -> label == 0 || label == 1, y) ||
+        error("Labels must be binary (0 or 1)")
+
+    # --- Model predictions ---
+    scores = predict(model, X)
+    length(scores) == n_samples ||
+        error("predict(model, X) must return one score per sample")
+
+    scores = Float64.(scores)  # ensure numeric stability
+
+    # --- Number of true positives ---
+    n_pos = sum(y)
+
+    n_pos == 0 && error("No positive examples in y")
+    n_pos == n_samples && return -Inf, collect(1:n_samples)
+
+    # --- Sort by descending score ---
+    sorted_idx = sortperm(scores; rev=true)
+
+    # --- Threshold selection ---
+    threshold = scores[sorted_idx[n_pos]]
+
+    return threshold, sorted_idx
 end

@@ -7,6 +7,7 @@ using Optim
 using LinearAlgebra
 using RestrictedBoltzmannMachines, AdvRBMs
 using Statistics, DataFrames, CSV, Random, Printf
+using Plots, MLUtils, Measures
 
 include("classifier_f.jl")
 include("classifier_sec.jl")
