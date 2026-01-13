@@ -12,4 +12,5 @@ using Plots, MLUtils, Measures
 include("classifier_f.jl")
 include("classifier_sec.jl")
 include("utils.jl")
+include("matrix_rbm.jl")
 end # module RiboSwitch_Julia

@@ -3,5 +3,4 @@ Manifest.toml
 *.jl.mem
 .DS_Store
 artifacts
-scripts
 results
