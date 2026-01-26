@@ -38,11 +38,11 @@ end
     using JLD2
     using DataFrames
     using XLSX
+    using CSV
     using Optim
 end
 
-
-df = CSV.read("/home/jacopo/RiboSwitch_Julia/artifacts/Ribo_aligned.tsv", DataFrame; delim='\t')
+df = CSV.read("/lustre/fswork/projects/rech/qwy/urv52bu/RiboSwitch_Julia/artifacts/Ribo_aligned.tsv", DataFrame; delim='\t')
 X, removed_idx = one_hot_encode(df.aligned_sequence, alphabet)
 y = df.TOME_Predicted_OGT_Celsius
 y = y[setdiff(1:end, removed_idx)]
@@ -51,26 +51,19 @@ labels = thermophilic_label(y; threshold=45)
 q = AdvRBMs.calc_q(X, labels)
 Q_full = AdvRBMs.calc_Q(X, labels)
 Q = lowrank_decomp_tensor(Q_full, 5)
-# ----------------------------------------------------------
-# Define model-training task (runs on each worker)
-# ----------------------------------------------------------
-@everywhere function train_rbm_job(N::Int, fname::String, hidden_range, gpu_id::Int)
 
+# Modify train_rbm_job to accept data as parameters
+@everywhere function train_rbm_job(N::Int, fname::String, hidden_range, gpu_id::Int, q, Q, X)
     CUDA.device!(gpu_id)
     q_gpu = cu(q)
     Q_gpu = cu(Q)
-
-    # Build RBM on CPU first
+    
     rbm = RBM(PottsGumbel((5, 108)), Binary((150,)), zeros(Float32, 5, 108, 150))
-
-    # Move RBM parameters to GPU
     rbm_gpu = gpu(rbm)
-
-    # Move data last (biggest)
     data_gpu = cu(X)
-
+    
     initialize!(rbm_gpu, data_gpu)
-
+    
     training_ok = true
     try
         AdvRBMs.advpcd!(rbm_gpu, data_gpu;
@@ -87,59 +80,36 @@ Q = lowrank_decomp_tensor(Q_full, 5)
         training_ok = false
         @warn "Training failed on pid=$(myid()) for $fname: $e"
     end
-
+    
     if !training_ok
         @warn "Skipping save for failed model $fname"
         return nothing
     end
-
+    
     rbm_cpu = cpu(rbm_gpu)
     JLD2.@save fname rbm_cpu
     @info "Saved trained RBM: $fname"
     return fname
 end
-# ----------------------------------------------------------
-# Job definitions
-# ----------------------------------------------------------
-jobs = [
-    (1, "RNA_binary_fs_20.jld2", 21:150),
-    (1, "RNA_binary_fs_15.jld2",16:150),
-    (1, "RNA_binary_fs_10.jld2",11:150),
-    (1, "RNA_binary_fs_5.jld2",6:150)
-]
 
-# ----------------------------------------------------------
-# Multi-GPU Dispatch
-# ----------------------------------------------------------
-wks = workers()
-ngpus = length(CUDA.devices())
-
-@assert length(wks) == ngpus "Expected one worker per GPU, got $(length(wks)) workers for $ngpus GPUs"
-
-# Split jobs into chunks, one chunk per worker
-job_chunks = [jobs[i:length(wks):end] for i in 1:length(wks)]
-
-@everywhere function run_job_chunk(jobs_chunk, gpu_id)
-    # Bind this worker to its GPU once
+# Modify run_job_chunk to accept and pass data
+@everywhere function run_job_chunk(jobs_chunk, gpu_id, q, Q, X)
     CUDA.device!(gpu_id)
     @info "Worker $(myid()) bound to GPU $gpu_id"
-
+    
     for (N, fname, hrange) in jobs_chunk
         @info "[Worker $(myid())] starting $fname on GPU=$gpu_id"
-        train_rbm_job(N, fname, hrange, gpu_id)
+        train_rbm_job(N, fname, hrange, gpu_id, q, Q, X)
         @info "[Worker $(myid())] finished $fname on GPU=$gpu_id"
-        CUDA.reclaim()  # clean up cached memory before next job
+        CUDA.reclaim()
     end
-
+    
     return nothing
 end
 
+# Dispatch jobs with data passed as arguments
 futs = Future[]
 for (chunk_idx, pid) in enumerate(wks)
-    gpu_id = chunk_idx - 1  # 0-based indices
-    push!(futs, @spawnat pid run_job_chunk(job_chunks[chunk_idx], gpu_id))
+    gpu_id = chunk_idx - 1
+    push!(futs, @spawnat pid run_job_chunk(job_chunks[chunk_idx], gpu_id, q, Q, X))
 end
-
-@info "Waiting for training jobs..."
-fetch.(futs)
-@info "All RBM jobs finished!"

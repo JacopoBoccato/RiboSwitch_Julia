@@ -20,6 +20,30 @@ Returns:
 - V     : right eigenvectors or right singular vectors
 - kind  : :eigen or :svd
 """
+function lowrank_decomp_tensor(Q::AbstractArray{T,5},
+                               r::Integer;
+                               atol=1e-10) where T
+    # Check dimensions
+    a1, L1, a2, L2, d = size(Q)
+    @assert a1 == a2
+    @assert L1 == L2
+    @assert d == 1
+
+    a = a1
+    L = L1
+
+    # Reshape tensor -> matrix
+    Qmat = reshape(Q, a*L, a*L)
+
+    # Low-rank decomposition (your existing function)
+    Qr_mat, vals, U, V, method = lowrank_decomp(Qmat, r; atol=atol)
+
+    # Reshape back to tensor
+    Qr_tensor = reshape(Qr_mat, a, L, a, L, 1)
+
+    return Qr_tensor, vals, U, V, method
+end
+
 function lowrank_decomp(Q::AbstractMatrix, r::Integer; atol=1e-10)
     @assert size(Q,1) == size(Q,2)
     @assert 1 ≤ r ≤ size(Q,1)
@@ -46,6 +70,7 @@ function lowrank_decomp(Q::AbstractMatrix, r::Integer; atol=1e-10)
         return Qr, vals, U, V, :svd
     end
 end
+
 
 """
     lowrank_decomp_stack(Q, r)

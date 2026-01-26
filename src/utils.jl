@@ -278,6 +278,37 @@ function one_hot_encode(seqs, alphabet)
     return X, removed_idx
 end
 
+function filter_3d_by_targets(
+    data::AbstractArray{<:Real,3},
+    y::AbstractVector{<:Real};
+    t1::Real = 50.0,
+    t2::Real = 10.0
+)
+    @assert size(data, 3) == length(y)
+
+    slices = Vector{Array{eltype(data),2}}()
+    labels = Int[]
+
+    @inbounds for n in eachindex(y)
+        yn = y[n]
+
+        if yn > t1
+            push!(slices, copy(@view data[:, :, n]))
+            push!(labels, 1)
+
+        elseif yn < t2
+            push!(slices, copy(@view data[:, :, n]))
+            push!(labels, 0)
+        end
+    end
+
+    filtered = isempty(slices) ?
+        similar(data, size(data,1), size(data,2), 0) :
+        cat(slices...; dims=3)
+
+    return filtered, labels
+end
+
 function plot_confusion_matrix(cm::ConfusionMatrix, filename::String="confusion_matrix.png")
     # Definiamo le etichette
     labels = ["Negative (0)", "Positive (1)"]
